@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Punch Lab</title>
+<meta name="theme-color" content="#0E1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Punch Lab">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: fight-night console. Stage (camera/video) left, readout column right, round log below. Red/blue corner colors mean right/left hand everywhere. */
+:root {
+  --bg: #0E1115;
+  --panel: #151A20;
+  --panel-2: #1B2129;
+  --line: #29313B;
+  --fg: #E8EBEE;
+  --muted: #8B95A1;
+  --red: #E5484D;
+  --blue: #4A90F5;
+  --gold: #E3B04B;
+  --good: #3FB27F;
+  --warn: #E3B04B;
+  --bad: #E5484D;
+  --on-gold: #17130A;
+  --f-display: "Big Shoulders Display", "Oswald", "Arial Narrow", Impact, sans-serif;
+  --f-body: "Barlow", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #EEF0EE; --panel: #FFFFFF; --panel-2: #F5F6F5; --line: #D7DBDD;
+    --fg: #13171C; --muted: #5B6570; --red: #C8302C; --blue: #2460C8; --gold: #A8741A;
+    --good: #23865C; --warn: #A8741A; --bad: #C8302C; --on-gold: #FFFFFF; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #EEF0EE; --panel: #FFFFFF; --panel-2: #F5F6F5; --line: #D7DBDD;
+  --fg: #13171C; --muted: #5B6570; --red: #C8302C; --blue: #2460C8; --gold: #A8741A;
+  --good: #23865C; --warn: #A8741A; --bad: #C8302C; --on-gold: #FFFFFF; color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.5 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 32px;
+}
+.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 16px; }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.brand h1 { font: 800 clamp(30px, 5vw, 44px)/1 var(--f-display); letter-spacing: .01em; margin: 0; text-transform: uppercase; }
+.brand .by { font: 500 12px/1 var(--f-mono); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.status { font: 400 13px/1.4 var(--f-mono); color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+.status b { color: var(--fg); font-weight: 500; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: 1px; }
+.dot.ok { background: var(--good); } .dot.busy { background: var(--gold); } .dot.err { background: var(--bad); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.panel h2 { font: 600 12px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+
+/* Stage */
+.stage { position: relative; background: #000; border-radius: 6px 6px 0 0; overflow: hidden; aspect-ratio: 16 / 9; max-width: 100%; max-height: 78vh; margin-inline: auto; }
+.media { position: absolute; inset: 0; }
+.media.mirror { transform: scaleX(-1); }
+.media video, .media canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.idle { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; background: radial-gradient(120% 90% at 50% 100%, #1d2430 0%, #0b0d10 70%); color: #E8EBEE; }
+.idle-inner { max-width: 520px; display: grid; gap: 14px; }
+.idle h3 { margin: 0; font: 800 26px/1.05 var(--f-display); text-transform: uppercase; letter-spacing: .02em; text-wrap: balance; }
+.idle ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: #C3CAD2; font-size: 14px; }
+.idle ol b { color: #fff; font-weight: 600; }
+.flash { position: absolute; left: 14px; top: 12px; font: 800 22px/1 var(--f-display); text-transform: uppercase; letter-spacing: .03em; padding: 6px 10px; border-radius: 4px; color: #fff; opacity: 0; transition: opacity .5s; pointer-events: none; }
+.flash.show { opacity: 1; transition: none; }
+.calib { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(10,12,15,.82); color: #E8EBEE; font: 500 13px/1.3 var(--f-mono); padding: 8px 12px; border-radius: 4px; white-space: nowrap; max-width: calc(100% - 28px); overflow: hidden; text-overflow: ellipsis; }
+.progress { height: 3px; background: var(--line); }
+.progress > i { display: block; height: 100%; width: 0; background: var(--gold); }
+
+.controls { padding: 14px; display: grid; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+button, .filebtn {
+  font: 600 14px/1 var(--f-body); color: var(--fg); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 5px; padding: 10px 14px; cursor: pointer; min-height: 40px;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+button:hover, .filebtn:hover { border-color: var(--muted); }
+button:focus-visible, .filebtn:focus-within, select:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+button.primary { background: var(--gold); color: var(--on-gold); border-color: var(--gold); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.field { display: grid; gap: 4px; }
+.field label { font: 500 11px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+select, input[type="number"] {
+  font: 500 14px/1 var(--f-body); color: var(--fg); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 5px; padding: 9px 10px; min-height: 40px;
+}
+input[type="number"] { width: 84px; font-family: var(--f-mono); }
+.hint { font-size: 13px; color: var(--muted); margin: 0; max-width: 70ch; }
+.fileonly[hidden] { display: none !important; }
+.loaderr { border: 1px solid var(--bad); border-radius: 5px; padding: 12px 14px; display: grid; gap: 8px; justify-items: start; font-size: 14px; max-width: 75ch; }
+.loaderr p { margin: 0; }
+.loaderr .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.loaderr code { font: 400 12.5px/1.4 var(--f-mono); overflow-wrap: anywhere; background: var(--panel-2); padding: 2px 5px; border-radius: 3px; user-select: all; }
+.loaderr a { color: var(--gold); }
+button.install { min-height: 32px; padding: 6px 12px; font-size: 13px; }
+.ioshint { margin: 0; font-size: 13.5px; color: var(--muted); border: 1px dashed var(--line); border-radius: 5px; padding: 8px 12px; }
+.loaderr .tried { font: 400 12.5px/1.4 var(--f-mono); color: var(--muted); overflow-wrap: anywhere; }
+
+/* Readout column */
+.side { display: grid; gap: 16px; min-width: 0; }
+.hud { padding: 16px; display: grid; gap: 14px; }
+.hud-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.tag { font: 600 12px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; padding: 5px 8px; border-radius: 3px; border: 1px solid currentColor; }
+.tag.L { color: var(--blue); } .tag.R { color: var(--red); }
+.speed { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.speed .num { font: 800 clamp(64px, 9vw, 92px)/.85 var(--f-display); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.speed .unit { font: 600 18px/1 var(--f-display); text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+.ptype { font: 800 24px/1 var(--f-display); text-transform: uppercase; letter-spacing: .03em; }
+.kv { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+.kv div { display: grid; gap: 3px; min-width: 0; }
+.kv span { font: 500 11px/1.1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.kv b { font: 500 16px/1.1 var(--f-mono); font-variant-numeric: tabular-nums; }
+.pi { display: grid; gap: 6px; }
+.pi-top { display: flex; justify-content: space-between; align-items: baseline; }
+.pi-top b { font: 800 30px/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.meter { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.meter i { height: 10px; background: var(--line); border-radius: 1px; }
+.meter i.on { background: var(--gold); }
+.small { font-size: 12.5px; color: var(--muted); margin: 0; }
+.chain canvas { width: 100%; height: 150px; display: block; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font: 500 12px/1 var(--f-mono); color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 3px; vertical-align: 3px; margin-right: 6px; }
+.seqline { font: 500 13px/1.4 var(--f-mono); }
+.seqline .ok { color: var(--good); } .seqline .off { color: var(--warn); }
+
+.stats { padding: 16px; display: grid; gap: 12px; }
+.stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px 16px; }
+.stat { display: grid; gap: 2px; min-width: 0; }
+.stat span { font: 500 11px/1.1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stat b { font: 600 22px/1.1 var(--f-display); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.stat b.L { color: var(--blue); } .stat b.R { color: var(--red); }
+
+/* Round log */
+.log { padding: 16px; display: grid; gap: 12px; }
+.log-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.strip canvas { width: 100%; height: 120px; display: block; }
+.tablewrap { overflow-x: auto; max-height: 360px; overflow-y: auto; border-top: 1px solid var(--line); }
+table { width: 100%; border-collapse: collapse; font: 400 13px/1.3 var(--f-mono); font-variant-numeric: tabular-nums; min-width: 720px; }
+th { position: sticky; top: 0; background: var(--panel); text-align: left; font-weight: 500; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 9px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td.num, th.num { text-align: right; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--panel-2); }
+tbody tr.sel td { background: color-mix(in srgb, var(--gold) 14%, transparent); }
+.hand { display: inline-block; width: 22px; font-weight: 500; }
+.hand.L { color: var(--blue); } .hand.R { color: var(--red); }
+.g-ok { color: var(--good); } .g-bad { color: var(--bad); }
+.empty { padding: 22px 4px; color: var(--muted); font-size: 14px; }
+footer.note { font-size: 12.5px; color: var(--muted); max-width: 90ch; }
+@media (prefers-reduced-motion: reduce) { .flash { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Punch Lab</h1>
+      <span class="by">Wavelength Fitness · prototype</span>
+      <button id="btnInstall" class="install" hidden>Install app</button>
+    </div>
+    <div class="status" aria-live="polite">
+      <span><i class="dot busy" id="dotModel"></i><span id="stModel">Loading pose model…</span></span>
+      <span>Tracking <b id="stFps">–</b> fps</span>
+      <span id="stScale">Not calibrated</span>
+    </div>
+  </header>
+
+  <p class="ioshint" id="iosHint" hidden>To install on iPhone or iPad: tap the Share button in Safari, then <b>Add to Home Screen</b>.</p>
+
+  <div class="main">
+    <section class="panel" aria-label="Camera and video">
+      <div class="stage" id="stage">
+        <div class="media" id="media">
+          <video id="video" playsinline muted></video>
+          <canvas id="overlay"></canvas>
+        </div>
+        <div class="idle" id="idle">
+          <div class="idle-inner">
+            <h3>Set up your camera, then throw</h3>
+            <ol>
+              <li><b>Full body in frame</b>, head to feet, with a little room for your reach.</li>
+              <li><b>Camera at chest height</b>, 2.5 to 3.5 m away, turned about 45° off your front. A straight side view hides your back arm.</li>
+              <li><b>60 fps or faster.</b> For the most accurate numbers, record slow-mo on your phone and load it as a video.</li>
+              <li><b>Good light, plain background.</b> Fast hands blur in dim rooms and the tracker loses them.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="flash" id="flash"></div>
+        <div class="calib" id="calib" hidden></div>
+      </div>
+      <div class="progress" id="progress" hidden><i id="progressBar"></i></div>
+
+      <div class="controls">
+        <div class="row">
+          <div class="seg" role="group" aria-label="Source">
+            <button id="srcCam" aria-pressed="true">Live camera</button>
+            <button id="srcFile" aria-pressed="false">Video file</button>
+          </div>
+          <button class="primary" id="btnGo" disabled>Start camera</button>
+          <label class="filebtn fileonly" id="fileLabel" hidden>Choose video<input type="file" id="fileInput" accept="video/*"></label>
+          <button id="btnReset">Reset session</button>
+        </div>
+        <div class="row">
+          <div class="field"><label for="height">Your height</label>
+            <div class="row" style="gap:6px"><input type="number" id="height" min="48" max="230" step="1" value="70"><select id="heightUnit" aria-label="Height unit"><option value="in">in</option><option value="cm">cm</option></select></div></div>
+          <div class="field"><label for="stance">Stance</label>
+            <select id="stance"><option value="orthodox">Orthodox (left lead)</option><option value="southpaw">Southpaw (right lead)</option></select></div>
+          <div class="field"><label for="units">Speed units</label>
+            <select id="units"><option value="mph">mph</option><option value="ms">m/s</option></select></div>
+          <div class="field"><label for="model">Tracking model</label>
+            <select id="model"><option value="lite">Lite (fastest)</option><option value="full" selected>Full (balanced)</option><option value="heavy">Heavy (most accurate)</option></select></div>
+          <div class="field fileonly" hidden><label for="slowmo">Video plays as</label>
+            <select id="slowmo"><option value="1">Normal speed</option><option value="4">Slow-mo, 4× slower</option><option value="8">Slow-mo, 8× slower</option></select></div>
+        </div>
+        <div class="loaderr" id="loadErr" role="alert" hidden></div>
+        <p class="hint" id="hint">Height sets the scale. The first second of tracking measures your arm length, so start with your full body visible.</p>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="panel hud" aria-label="Selected punch">
+        <div class="hud-head">
+          <h2 id="hudTitle">Last punch</h2>
+          <span class="tag" id="hudHand" hidden></span>
+        </div>
+        <div>
+          <div class="speed"><span class="num" id="hudSpeed">–</span><span class="unit" id="hudUnit">mph</span></div>
+          <div class="ptype" id="hudType">No punches yet</div>
+        </div>
+        <div class="kv">
+          <div><span>Out</span><b id="hudOut">–</b></div>
+          <div><span>Back to guard</span><b id="hudBack">–</b></div>
+          <div><span>Reach</span><b id="hudReach">–</b></div>
+          <div><span>Hip turn</span><b id="hudHip">–</b></div>
+          <div><span>Shoulder turn</span><b id="hudSh">–</b></div>
+          <div><span>Other hand</span><b id="hudGuard">–</b></div>
+        </div>
+        <div class="pi">
+          <div class="pi-top"><h2>Power Index</h2><b id="hudPI">–</b></div>
+          <div class="meter" id="meter"></div>
+          <p class="small">Built from hand speed, hip and shoulder turn, sequencing and hip drive. It isn't force. Compare it to your own past sessions.</p>
+        </div>
+        <div class="chain">
+          <div class="pi-top" style="margin-bottom:6px"><h2>Kinetic chain</h2></div>
+          <canvas id="chain" aria-label="Hip, shoulder and hand speed around the punch"></canvas>
+          <div class="legend"><span><i style="background:var(--gold)"></i>Hips</span><span><i style="background:var(--muted)"></i>Shoulders</span><span><i id="legHand" style="background:var(--fg)"></i>Hand</span></div>
+          <p class="seqline" id="seqLine">Hips should peak first, then shoulders, then the hand.</p>
+        </div>
+      </section>
+
+      <section class="panel stats" aria-label="Session">
+        <h2>Session</h2>
+        <div class="stats-grid">
+          <div class="stat"><span>Punches</span><b id="sCount">0</b></div>
+          <div class="stat"><span>Per minute</span><b id="sRate">–</b></div>
+          <div class="stat"><span>Left avg / best</span><b class="L" id="sLeft">–</b></div>
+          <div class="stat"><span>Right avg / best</span><b class="R" id="sRight">–</b></div>
+          <div class="stat"><span>Avg Power Index</span><b id="sPI">–</b></div>
+          <div class="stat"><span>Guard held</span><b id="sGuard">–</b></div>
+          <div class="stat"><span>Speed held, late vs early</span><b id="sHold">–</b></div>
+          <div class="stat"><span>Sequencing in order</span><b id="sSeq">–</b></div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <section class="panel log" aria-label="Punch log">
+    <div class="log-head">
+      <h2>Round log</h2>
+      <button id="btnCsv" disabled>Export CSV</button>
+    </div>
+    <div class="strip"><canvas id="strip" aria-label="Hand speed per punch"></canvas></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>#</th><th class="num">Time</th><th>Hand</th><th>Punch</th><th class="num">Speed</th><th class="num">Power</th><th class="num">Out</th><th class="num">Back</th><th>Sequence</th><th>Guard</th></tr></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+      <div class="empty" id="logEmpty">Punches show up here as you throw them. Click a row to see its breakdown.</div>
+    </div>
+  </section>
+
+  <footer class="note">Prototype. Speeds come from MediaPipe pose tracking and get more accurate with higher frame rates and a clear view of your hands. Punch types are estimated from elbow angle and hand path. Nothing leaves this device.</footer>
+</div>
+
+<script id="engine">
+/* ---------- Punch detection engine (pure, no DOM) ---------- */
+(function (root) {
+  const I = { nose: 0, ls: 11, rs: 12, le: 13, re: 14, lw: 15, rw: 16, lh: 23, rh: 24 };
+  const TRACKED = [0, 11, 12, 13, 14, 15, 16, 23, 24];
+  const ARM_RATIO = 0.332;          // shoulder-to-wrist length as a share of standing height
+  const MIN_PEAK = 2.5;             // m/s, slowest hand speed counted as a punch
+  const LAG = 0.4;                  // s of data needed after a speed peak before deciding
+  const SPEED_SPAN = 0.02;          // s, hand speed is measured over at least this much time
+  const YAW_SPAN = 0.05;            // s, hip and shoulder turn rate is measured over this much time
+  const R2D = 180 / Math.PI;
+
+  const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+  const len = (v) => Math.hypot(v.x, v.y, v.z);
+  const dist = (a, b) => len(sub(a, b));
+  const angleAt = (a, b, c) => {
+    const u = sub(a, b), v = sub(c, b);
+    const d = (u.x * v.x + u.y * v.y + u.z * v.z) / (len(u) * len(v) || 1);
+    return Math.acos(Math.max(-1, Math.min(1, d))) * R2D;
+  };
+  const median = (arr) => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
+  class OneEuro {
+    constructor(minCutoff, beta, dCutoff) { this.mc = minCutoff; this.beta = beta; this.dc = dCutoff; this.x = null; this.dx = 0; this.t = null; }
+    static a(cutoff, dt) { const tau = 1 / (2 * Math.PI * cutoff); return 1 / (1 + tau / dt); }
+    filter(v, t) {
+      if (this.x === null) { this.x = v; this.t = t; return v; }
+      const dt = Math.max(1e-4, t - this.t);
+      const d = (v - this.x) / dt;
+      this.dx = this.dx + OneEuro.a(this.dc, dt) * (d - this.dx);
+      const cutoff = this.mc + this.beta * Math.abs(this.dx);
+      this.x = this.x + OneEuro.a(cutoff, dt) * (v - this.x);
+      this.t = t;
+      return this.x;
+    }
+  }
+
+  function createSession(opts) {
+    const H = opts.heightM;
+    const lead = opts.stance === 'southpaw' ? 'R' : 'L';
+    const armLen = ARM_RATIO * H;
+    const FILTER = opts.filter || [1.5, 4.0, 4.0];
+    const dbg = opts.debug || null;   // optional (hand, t, reason) callback for testing
+    const S = {
+      scale: null, armSamples: [], filters: new Map(), buf: [], punches: [], pending: [],
+      lastPeak: { L: -9, R: -9 }, scanned: { L: -9, R: -9 }, home: { L: null, R: null },
+      yaw: { hip: null, sh: null }, startT: null, lastT: null, nextId: 1,
+    };
+
+    function resetTracking() {
+      S.filters.clear(); S.buf = []; S.pending = [];
+      S.yaw = { hip: null, sh: null }; S.home = { L: null, R: null };
+      S.scanned = { L: -9, R: -9 }; S.lastPeak = { L: -9, R: -9 };
+    }
+
+    function filt(idx, axis, v, t) {
+      const key = idx * 3 + axis;
+      let f = S.filters.get(key);
+      if (!f) { f = new OneEuro(FILTER[0], FILTER[1], FILTER[2]); S.filters.set(key, f); }
+      return f.filter(v, t);
+    }
+
+    // Unwrapped, lightly smoothed yaw angle in degrees
+    function yawDeg(name, raw, t) {
+      const y = S.yaw[name];
+      if (!y) { S.yaw[name] = { raw, un: raw * R2D, t }; return raw * R2D; }
+      let d = raw - y.raw;
+      if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
+      y.raw = raw; y.un += d * R2D; y.t = t;
+      return y.un;
+    }
+
+    // Index of the newest sample at least `span` seconds older than t (or the oldest one)
+    function back(t, span) {
+      for (let k = S.buf.length - 1; k >= 0; k--) if (t - S.buf[k].t >= span) return k;
+      return S.buf.length ? 0 : -1;
+    }
+
+    function nearest(t) {
+      let best = S.buf[0], bd = Infinity;
+      for (const s of S.buf) { const d = Math.abs(s.t - t); if (d < bd) { bd = d; best = s; } }
+      return best;
+    }
+
+    function classify(h, sJ, elbowMax) {
+      const role = h === lead ? 'lead' : 'rear';
+      // Direction of travel at peak speed: an uppercut drives up, a hook sweeps across, a straight goes out
+      const p0 = nearest(sJ.t - 0.02), p1 = nearest(sJ.t + 0.02);
+      const d = sub(p1.rel[h], p0.rel[h]);
+      const up = -d.y / (len(d) || 1e-6);
+      let kind;
+      if (elbowMax >= 140) kind = 'straight';
+      else if (up > 0.6) kind = 'uppercut';
+      else kind = 'hook';
+      const name = kind === 'straight' ? (role === 'lead' ? 'Jab' : 'Cross')
+        : (role === 'lead' ? 'Lead ' : 'Rear ') + kind;
+      return { role, kind, name };
+    }
+
+    function buildPunch(h, a, j, e) {
+      const buf = S.buf, sA = buf[a], sJ = buf[j], sE = buf[e];
+      const tPeak = sJ.t - SPEED_SPAN / 2;          // backward-difference speed lags by half its span
+      const rate = (key, t) => { const p = nearest(t - YAW_SPAN / 2), q = nearest(t + YAW_SPAN / 2); return q.t > p.t ? (q[key] - p[key]) / (q.t - p.t) : 0; };
+      for (const s of buf) if (s.t >= tPeak - 0.7 && s.t <= tPeak + 0.4) { s.hipVel = rate('hipYaw', s.t); s.shVel = rate('shYaw', s.t); }
+      let hipI = -1, shI = -1, hipMax = 0, shMax = 0, reach = 0;
+      for (let k = 0; k < buf.length; k++) {
+        const s = buf[k];
+        if (s.t >= sA.t && s.t <= sE.t + 0.05) reach = Math.max(reach, s.ext[h]);
+        if (s.t < sA.t - 0.15 || s.t > sE.t) continue;
+        if (Math.abs(s.hipVel) > hipMax) { hipMax = Math.abs(s.hipVel); hipI = k; }
+        if (Math.abs(s.shVel) > shMax) { shMax = Math.abs(s.shVel); shI = k; }
+      }
+      const tHip = hipI >= 0 ? (buf[hipI].t - tPeak) * 1000 : null;
+      const tSh = shI >= 0 ? (buf[shI].t - tPeak) * 1000 : null;
+      const gapScore = (g) => (g >= -10 ? 50 : Math.max(0, 50 + (g + 10)));
+      let seq = null, inOrder = null;
+      if (tHip !== null && tSh !== null && (hipMax > 60 || shMax > 90)) {
+        const g1 = tSh - tHip, g2 = 0 - tSh;
+        seq = Math.round(gapScore(g1) + gapScore(g2));
+        inOrder = g1 >= -10 && g2 >= -10;
+      }
+      const drive = sA.torso2D > 1 ? Math.hypot(sE.hip2D.x - sA.hip2D.x, sE.hip2D.y - sA.hip2D.y) / sA.torso2D : 0;
+      let elbowMax = 0;
+      for (let k = j; k <= e; k++) elbowMax = Math.max(elbowMax, buf[k].elb[h]);
+      const cls = classify(h, sJ, elbowMax);
+      const o = h === 'L' ? 'R' : 'L';
+      const guardUp = sE.vis[o] ? sE.wr[o].y <= sE.sh[o].y + 0.06 : null;
+
+      const speedN = clamp01(sJ.sp[h] / 9);
+      const rotN = clamp01((hipMax / 500 + shMax / 900) / 2);
+      const seqN = seq === null ? 0.25 : seq / 100;
+      const driveN = clamp01(drive / 0.25);
+      const power = Math.round(100 * (0.5 * speedN + 0.2 * rotN + 0.15 * seqN + 0.15 * driveN));
+
+      const trace = { t: [], hand: [], hip: [], sh: [] };
+      for (const s of buf) {
+        if (s.t < tPeak - 0.35 || s.t > tPeak + 0.3) continue;
+        trace.t.push((s.t - tPeak) * 1000); trace.hand.push(s.sp[h]);
+        trace.hip.push(Math.abs(s.hipVel)); trace.sh.push(Math.abs(s.shVel));
+      }
+      return {
+        id: S.nextId++, t: tPeak - S.startT, hand: h, role: cls.role, kind: cls.kind, type: cls.name,
+        speed: sJ.sp[h], outMs: Math.round((sE.t - sA.t) * 1000), reach, retractMs: null,
+        hipPeak: Math.round(hipMax), shPeak: Math.round(shMax), tHip, tSh, seq, inOrder,
+        drive, guardUp, power, trace,
+      };
+    }
+
+    function scan(h, now) {
+      const buf = S.buf, out = [];
+      for (let j = 1; j < buf.length - 1; j++) {
+        const s = buf[j];
+        if (s.t <= S.scanned[h]) continue;
+        if (s.t > now - LAG) break;
+        S.scanned[h] = s.t;
+        const v = s.sp[h];
+        if (v < MIN_PEAK || !s.vis[h]) continue;
+        if (!(v >= buf[j - 1].sp[h] && v > buf[j + 1].sp[h])) continue;
+        let isMax = true;
+        for (let k = 0; k < buf.length; k++) {
+          if (k !== j && Math.abs(buf[k].t - s.t) <= 0.12 && buf[k].sp[h] > v) { isMax = false; break; }
+        }
+        if (!isMax) continue;
+        // A wind-up (like the dip before an uppercut) is followed by a faster drive that doesn't end at guard
+        let windup = false, extNear = 0;
+        for (let k = j; k < buf.length && buf[k].t <= s.t + 0.15; k++) extNear = Math.max(extNear, buf[k].ext[h]);
+        for (let k = j + 1; extNear < 0.85 && k < buf.length - 1 && buf[k].t <= s.t + 0.22; k++) {
+          const q = buf[k];
+          if (q.sp[h] > v && q.sp[h] >= buf[k - 1].sp[h] && q.sp[h] > buf[k + 1].sp[h] && nearest(q.t + 0.15).away[h] > 0.3) { windup = true; break; }
+        }
+        if (windup) { dbg && dbg(h, s.t, 'wind-up before a faster move', v); continue; }
+        if (s.t - S.lastPeak[h] < 0.22) { dbg && dbg(h, s.t, 'refractory', v); continue; }
+        // If the other hand is clearly faster right now, this hand is just riding the body's rotation
+        const o = h === 'L' ? 'R' : 'L';
+        let other = 0;
+        for (const q of buf) if (Math.abs(q.t - s.t) <= 0.12) other = Math.max(other, q.sp[o]);
+        if (other > v * 1.15) { dbg && dbg(h, s.t, 'other hand faster', v); continue; }
+        let a = j;
+        while (a > 0 && buf[a - 1].sp[h] > 0.9 && s.t - buf[a - 1].t < 0.45) a--;
+        if (a > 0) a--;
+        // End of the move: the hand slows down again, or 250 ms after the speed peak
+        let e = j;
+        while (e < buf.length - 1 && buf[e + 1].t <= s.t + 0.25 && buf[e + 1].sp[h] > 0.9) e++;
+        if (e < buf.length - 1) e++;
+        const travel = dist(buf[e].rel[h], buf[a].rel[h]) / armLen;
+        // A return to guard travels far too, but it finishes back at the guard position
+        if (travel < 0.25 || buf[e].away[h] < 0.25) { dbg && dbg(h, s.t, `not a punch travel=${travel.toFixed(2)} endAway=${buf[e].away[h].toFixed(2)}`, v); continue; }
+        let low = 0;
+        for (let k = a; k <= e; k++) if (!buf[k].vis[h]) low++;
+        if (low > (e - a + 1) / 2) continue;
+        S.lastPeak[h] = s.t;
+        const p = buildPunch(h, a, j, e);
+        S.punches.push(p);
+        const thresh = Math.max(0.15, 0.4 * buf[e].away[h]);
+        for (let k = e + 1; k < buf.length; k++) if (buf[k].away[h] <= thresh) { p.retractMs = Math.round((buf[k].t - buf[e].t) * 1000); break; }
+        if (p.retractMs === null) S.pending.push({ p, h, tE: buf[e].t, thresh });
+        out.push(p);
+      }
+      return out;
+    }
+
+    function push(t, world, img) {
+      if (!world || !img) return { calibrating: S.scale === null, newPunches: [], updated: [] };
+      if (S.lastT !== null && (t <= S.lastT || t - S.lastT > 0.5)) resetTracking();
+      if (S.startT === null) S.startT = t;
+      const vis = (i) => (img[i].visibility ?? 1);
+
+      if (S.scale === null) {
+        for (const [s, e, w] of [[I.ls, I.le, I.lw], [I.rs, I.re, I.rw]]) {
+          if (vis(s) > 0.6 && vis(e) > 0.6 && vis(w) > 0.6) S.armSamples.push(dist(world[s], world[e]) + dist(world[e], world[w]));
+        }
+        S.lastT = t;
+        if (S.armSamples.length < 40) return { calibrating: true, progress: S.armSamples.length / 40, newPunches: [], updated: [] };
+        S.scale = armLen / median(S.armSamples);
+      }
+
+      const P = {};
+      for (const i of TRACKED) {
+        const w = world[i];
+        P[i] = { x: filt(i, 0, w.x, t) * S.scale, y: filt(i, 1, w.y, t) * S.scale, z: filt(i, 2, w.z, t) * S.scale };
+      }
+      const prev = S.buf[S.buf.length - 1];
+      const kb = back(t, SPEED_SPAN), ref = kb >= 0 ? S.buf[kb] : null;
+      const shMid = { x: (P[I.ls].x + P[I.rs].x) / 2, y: (P[I.ls].y + P[I.rs].y) / 2, z: (P[I.ls].z + P[I.rs].z) / 2 };
+      const hands = { L: [I.ls, I.le, I.lw], R: [I.rs, I.re, I.rw] };
+      const sample = { t, ext: {}, sp: {}, vis: {}, wr: {}, sh: {}, elb: {}, rel: {}, away: {} };
+      for (const h of ['L', 'R']) {
+        const [s, e, w] = hands[h];
+        sample.wr[h] = P[w]; sample.sh[h] = P[s];
+        sample.rel[h] = sub(P[w], shMid);
+        sample.ext[h] = dist(P[w], P[s]) / armLen;
+        sample.elb[h] = angleAt(P[s], P[e], P[w]);
+        sample.vis[h] = vis(w) > 0.4 && vis(e) > 0.4;
+        let sp = ref ? dist(P[w], ref.wr[h]) / Math.max(1e-4, t - ref.t) : 0;
+        if (sp > 16) sp = prev ? prev.sp[h] : 0;          // tracking glitch, not a hand
+        sample.sp[h] = sample.vis[h] ? sp : 0;
+        // Guard home: where this hand rests, updated only while it is slow
+        if (!S.home[h]) S.home[h] = { ...sample.rel[h] };
+        sample.away[h] = dist(sample.rel[h], S.home[h]) / armLen;
+        if (sample.sp[h] < 0.8 && prev) {
+          const a = Math.min(1, (t - prev.t) / 0.5);
+          const hm = S.home[h], r = sample.rel[h];
+          hm.x += a * (r.x - hm.x); hm.y += a * (r.y - hm.y); hm.z += a * (r.z - hm.z);
+        }
+      }
+      sample.hipYaw = yawDeg('hip', Math.atan2(P[I.rh].z - P[I.lh].z, P[I.rh].x - P[I.lh].x), t);
+      sample.shYaw = yawDeg('sh', Math.atan2(P[I.rs].z - P[I.ls].z, P[I.rs].x - P[I.ls].x), t);
+      const hm = { x: (img[I.lh].x + img[I.rh].x) / 2, y: (img[I.lh].y + img[I.rh].y) / 2 };
+      const sm = { x: (img[I.ls].x + img[I.rs].x) / 2, y: (img[I.ls].y + img[I.rs].y) / 2 };
+      sample.hip2D = hm; sample.torso2D = Math.hypot(sm.x - hm.x, sm.y - hm.y);
+
+      S.buf.push(sample);
+      while (S.buf.length && S.buf[0].t < t - 4) S.buf.shift();
+      S.lastT = t;
+
+      const newPunches = [...scan('L', t), ...scan('R', t)].sort((a, b) => a.t - b.t);
+      const updated = [];
+      S.pending = S.pending.filter((q) => {
+        if (q.p.retractMs !== null) return false;
+        if (t > q.tE && sample.away[q.h] <= q.thresh) { q.p.retractMs = Math.round((t - q.tE) * 1000); updated.push(q.p); return false; }
+        return t - q.tE < 1.2;
+      });
+      return { calibrating: false, sample, newPunches, updated };
+    }
+
+    return {
+      push, get punches() { return S.punches; }, get scale() { return S.scale; },
+      get armLen() { return armLen; }, get startT() { return S.startT; }, get lastT() { return S.lastT; },
+    };
+  }
+
+  root.PunchEngine = { createSession, OneEuro };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+
+<script type="module">
+import { FilesetResolver, PoseLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+// Engine files: tried in order. The first entry is a copy you can host next to this page.
+const WASM_SOURCES = [
+  "./mediapipe/wasm",
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm",
+  "https://unpkg.com/@mediapipe/tasks-vision@0.10.14/wasm",
+];
+// Pose model: the copy bundled with the app first (Lite and Full ship in ./mediapipe), then Google's
+const MODEL_URL = (key) => `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${key}/float16/1/pose_landmarker_${key}.task`;
+const MODEL_SOURCES = (key) => [`./mediapipe/pose_landmarker_${key}.task`, MODEL_URL(key)];
+
+/* ---------- on-device model storage (IndexedDB) ---------- */
+const idb = {
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('punchlab', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('models');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  },
+  async get(k) { try { const db = await idb.open(); return await new Promise((res) => { const q = db.transaction('models').objectStore('models').get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); } catch (e) { return null; } },
+  async put(k, v) { try { const db = await idb.open(); await new Promise((res) => { const t = db.transaction('models', 'readwrite'); t.objectStore('models').put(v, k); t.oncomplete = res; t.onerror = res; }); } catch (e) {} },
+};
+const BONES = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
+const MPH = 2.23694;
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const video = $('video'), overlay = $('overlay'), octx = overlay.getContext('2d');
+const st = {
+  vision: null, landmarker: null, modelKey: 'full', loading: false,
+  source: 'camera', stream: null, running: false, fileURL: null,
+  session: null, punches: [], selected: null, trails: { L: [], R: [] },
+  lastTs: 0, lastMedia: -1, fpsFrames: [], flashTimer: null,
+};
+
+/* ---------- settings ---------- */
+const SETTINGS_KEY = 'punchlab.settings';
+function loadSettings() {
+  try { const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    for (const k of ['height','heightUnit','stance','units','model','slowmo']) if (s[k] != null) $(k).value = s[k];
+  } catch (e) {}
+}
+function saveSettings() {
+  try { const s = {}; for (const k of ['height','heightUnit','stance','units','model','slowmo']) s[k] = $(k).value;
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) {}
+}
+function heightM() {
+  const v = parseFloat($('height').value);
+  if (!isFinite(v) || v <= 0) return 1.75;
+  return $('heightUnit').value === 'cm' ? v / 100 : v * 0.0254;
+}
+const units = () => $('units').value;
+const fmtSpeed = (ms) => ms == null ? '–' : (units() === 'mph' ? ms * MPH : ms).toFixed(1);
+const unitLabel = () => units() === 'mph' ? 'mph' : 'm/s';
+
+/* ---------- model ---------- */
+const hostOf = (u) => { try { return new URL(u, location.href).host || 'this site'; } catch (e) { return u; } };
+const shortErr = (e) => (e && e.message ? e.message : String(e)).replace(/^TypeError:\s*/, '');
+
+async function firstReachable(urls, test) {
+  const tried = [];
+  for (const u of urls) {
+    try { return { url: u, data: await test(u), tried }; }
+    catch (e) { tried.push(`${hostOf(u)} (${shortErr(e)})`); }
+  }
+  const err = new Error(tried.join(', ')); err.tried = tried; throw err;
+}
+
+async function loadModel(key) {
+  st.loading = true; setGoEnabled();
+  showLoadError(null);
+  let step = 'engine';
+  try {
+    if (!st.vision) {
+      setModelStatus('busy', 'Downloading pose engine…');
+      const base = await firstReachable(WASM_SOURCES, async (u) => {
+        const r = await fetch(`${u}/vision_wasm_internal.js`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const ct = r.headers.get('content-type') || '';
+        if (/text\/html/.test(ct)) throw new Error('not found');
+        return true;
+      });
+      st.vision = await FilesetResolver.forVisionTasks(base.url);
+      st.wasmFrom = hostOf(base.url);
+    }
+    step = 'model';
+    setModelStatus('busy', `Downloading ${key} pose model…`);
+    let modelData = await idb.get('model-' + key);
+    if (!modelData) {
+      const model = await firstReachable(MODEL_SOURCES(key), async (u) => {
+        const r = await fetch(u);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const buf = new Uint8Array(await r.arrayBuffer());
+        if (buf.length < 100000) throw new Error('file too small');
+        return buf;
+      });
+      modelData = model.data;
+      idb.put('model-' + key, modelData);
+    }
+    step = 'start';
+    setModelStatus('busy', 'Starting tracker…');
+    if (st.landmarker) { st.landmarker.close(); st.landmarker = null; }
+    const make = (delegate) => PoseLandmarker.createFromOptions(st.vision, {
+      baseOptions: { modelAssetBuffer: modelData, delegate }, runningMode: 'VIDEO', numPoses: 1,
+      minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.5,
+    });
+    let delegate = 'GPU';
+    try { st.landmarker = await make('GPU'); } catch (e) { delegate = 'CPU'; st.landmarker = await make('CPU'); }
+    st.modelKey = key;
+    setModelStatus('ok', `Pose model ready (${key}, ${delegate === 'GPU' ? 'GPU' : 'CPU'})`);
+  } catch (e) {
+    console.error('[Punch Lab] load failed at step:', step, e);
+    setModelStatus('err', step === 'engine' ? 'Pose engine failed to download' : step === 'model' ? 'Pose model failed to download' : 'Tracker failed to start');
+    showLoadError(step, e);
+  }
+  st.loading = false; setGoEnabled();
+}
+
+async function useModelFile(file) {
+  const key = $('model').value;
+  const buf = new Uint8Array(await file.arrayBuffer());
+  if (buf.length < 100000) { setModelStatus('err', 'That file is too small to be a pose model.'); return; }
+  await idb.put('model-' + key, buf);
+  loadModel(key);
+}
+
+function showLoadError(step, e) {
+  const box = $('loadErr');
+  if (!step) { box.hidden = true; return; }
+  const key = $('model').value;
+  const what = step === 'engine' ? 'the pose engine' : step === 'model' ? 'the pose model' : 'the tracker';
+  const tried = e && e.tried ? e.tried.join(' · ') : shortErr(e);
+  box.innerHTML = '';
+  const add = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text) el.textContent = text; box.appendChild(el); return el; };
+  if (location.protocol === 'file:') {
+    add('p', '', `Couldn't load ${what}. The app was opened as a file from your computer, and browsers block downloads for local files. Open it from its web address instead, then install it from there.`);
+  } else if (step === 'model') {
+    add('p', '', 'The pose model download was blocked, often by a browser extension, a privacy setting, or a network filter. You only need to get it once; the app keeps it on this device.');
+    const p = add('p', '');
+    p.append('1. Download the model from ');
+    const a = document.createElement('a'); a.href = MODEL_URL(key); a.textContent = `pose_landmarker_${key}.task`; a.target = '_blank'; a.rel = 'noopener';
+    p.append(a, ' (about ' + (key === 'lite' ? '6' : key === 'full' ? '9' : '30') + ' MB). If the link does nothing, try a private window or another network.');
+    add('p', '', '2. Load it here:');
+    const row = add('div', 'actions');
+    const lab = document.createElement('label'); lab.className = 'filebtn'; lab.textContent = 'Load model file';
+    const inp = document.createElement('input'); inp.type = 'file'; inp.id = 'modelFile'; inp.accept = '.task,application/octet-stream';
+    inp.addEventListener('change', () => { if (inp.files[0]) useModelFile(inp.files[0]); });
+    lab.appendChild(inp);
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Try download again';
+    b.addEventListener('click', () => loadModel(key));
+    row.append(lab, b);
+  } else {
+    add('p', '', `Couldn't load ${what}. Check your connection and try again. A browser extension or network filter can also block it.`);
+    const row = add('div', 'actions');
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Try again';
+    b.addEventListener('click', () => loadModel(key));
+    row.append(b);
+  }
+  add('p', 'tried', 'Tried: ' + tried);
+  box.hidden = false;
+}
+function setModelStatus(kind, text) { $('dotModel').className = 'dot ' + kind; $('stModel').textContent = text; }
+
+/* ---------- session ---------- */
+function newSession() {
+  st.session = PunchEngine.createSession({ heightM: heightM(), stance: $('stance').value });
+  st.punches = []; st.selected = null; st.trails = { L: [], R: [] }; st.lastMedia = -1;
+  $('stScale').textContent = 'Not calibrated';
+  renderAll();
+}
+
+/* ---------- sources ---------- */
+function setSource(src) {
+  stopAll();
+  st.source = src;
+  $('srcCam').setAttribute('aria-pressed', src === 'camera');
+  $('srcFile').setAttribute('aria-pressed', src === 'file');
+  document.querySelectorAll('.fileonly').forEach((el) => { el.hidden = src !== 'file'; });
+  $('media').classList.toggle('mirror', src === 'camera');
+  $('btnGo').textContent = src === 'camera' ? 'Start camera' : 'Analyze video';
+  $('hint').textContent = src === 'camera'
+    ? 'Height sets the scale. The first second of tracking measures your arm length, so start with your full body visible.'
+    : 'Phone slow-mo gives the best numbers. If the clip plays slowed down when you preview it, set "Video plays as" to match, or speeds will read too low.';
+  $('idle').hidden = false;
+  video.removeAttribute('src'); video.srcObject = null;
+  setGoEnabled();
+}
+function setGoEnabled() {
+  const ready = !!st.landmarker && !st.loading;
+  const go = $('btnGo');
+  if (st.source === 'camera') { go.disabled = !ready; go.textContent = st.running ? 'Stop camera' : 'Start camera'; }
+  else { go.disabled = !ready || !st.fileURL; go.textContent = st.running ? 'Stop' : 'Analyze video'; }
+}
+function stopAll() {
+  st.running = false;
+  if (st.stream) { st.stream.getTracks().forEach((t) => t.stop()); st.stream = null; }
+  if (!video.paused) video.pause();
+  $('calib').hidden = true;
+  setGoEnabled();
+}
+
+async function startCamera() {
+  try {
+    st.stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 }, facingMode: 'user' }, audio: false,
+    });
+  } catch (e) {
+    setModelStatus('err', 'Camera blocked. Allow camera access in your browser, then try again.');
+    return;
+  }
+  video.srcObject = st.stream;
+  await video.play();
+  newSession();
+  $('idle').hidden = true;
+  st.running = true; setGoEnabled();
+  video.requestVideoFrameCallback(onFrame);
+}
+
+// File analysis: the video pauses on every frame while the tracker works on it, so no frame is
+// skipped however slow the device is. Playback speed is set so frames arrive about 30 per second.
+async function analyzeFile() {
+  if (!st.fileURL) return;
+  newSession();
+  $('idle').hidden = true;
+  $('progress').hidden = false;
+  await new Promise((r) => video.readyState >= 1 ? r() : video.addEventListener('loadedmetadata', r, { once: true }));
+  video.pause();
+  video.currentTime = 0;
+  await new Promise((r) => video.addEventListener('seeked', r, { once: true }));
+  st.fileStep = null; st.fileTimes = []; st.fileFrames = 0;
+  video.playbackRate = 0.1;
+  st.running = true; setGoEnabled();
+  video.requestVideoFrameCallback(onFrame);
+  await video.play();
+}
+
+// Learn the clip's frame spacing from the first frames, then pick a playback speed that delivers ~30 frames a second
+function tuneFilePace(media) {
+  const ts = st.fileTimes;
+  if (st.fileStep || ts.length > 12) return;
+  ts.push(media);
+  if (ts.length < 8) return;
+  const d = ts.slice(1).map((t, i) => t - ts[i]).filter((x) => x > 0.0015).sort((a, b) => a - b);
+  if (!d.length) return;
+  st.fileStep = d[0];
+  video.playbackRate = Math.max(0.0625, Math.min(1, 30 * st.fileStep));
+}
+
+video.addEventListener('loadedmetadata', () => {
+  if (video.videoWidth && video.videoHeight) $('stage').style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+});
+video.addEventListener('ended', () => { if (st.source === 'file') finishFile(); });
+video.addEventListener('timeupdate', () => {
+  if (st.source === 'file' && video.duration) $('progressBar').style.width = (100 * video.currentTime / video.duration) + '%';
+});
+
+/* ---------- frame loop ---------- */
+function onFrame(now, meta) {
+  if (!st.running) return;
+  const isFile = st.source === 'file';
+  const media = meta && typeof meta.mediaTime === 'number' ? meta.mediaTime : now / 1000;
+  if (isFile) {
+    video.pause();
+    if (st.lastMedia >= 0 && media <= st.lastMedia + 1e-4) { nextFileFrame(); return; }  // same or earlier frame: skip it
+    tuneFilePace(media);
+    st.fileFrames++;
+  }
+  st.lastMedia = media;
+  const t = isFile ? media / parseFloat($('slowmo').value) : media;
+
+  let ts = Math.round(isFile ? media * 1000 : now);
+  if (ts <= st.lastTs) ts = st.lastTs + 1;
+  st.lastTs = ts;
+
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (overlay.width !== vw || overlay.height !== vh) { overlay.width = vw; overlay.height = vh; }
+  let res = null;
+  try { res = st.landmarker.detectForVideo(video, ts); } catch (e) { console.warn(e); }
+
+  // fps in footage time
+  st.fpsFrames.push(t); while (st.fpsFrames.length && st.fpsFrames[0] < t - 1) st.fpsFrames.shift();
+  $('stFps').textContent = st.fpsFrames.length > 2 ? Math.round((st.fpsFrames.length - 1) / (t - st.fpsFrames[0] || 1)) : '–';
+
+  octx.clearRect(0, 0, vw, vh);
+  if (res && res.landmarks && res.landmarks.length) {
+    const norm = res.landmarks[0], world = res.worldLandmarks[0];
+    const img = norm.map((p) => ({ x: p.x * vw, y: p.y * vh, visibility: p.visibility }));
+    const out = st.session.push(t, world, img);
+    if (out.calibrating) {
+      $('calib').hidden = false;
+      $('calib').textContent = `Measuring your arms… ${Math.round(100 * (out.progress || 0))}%`;
+    } else if (st.session.scale) {
+      if (!$('calib').hidden && !/Done/.test($('calib').textContent)) $('calib').hidden = true;
+      $('stScale').textContent = `Calibrated to ${(heightM() * 100).toFixed(0)} cm`;
+    }
+    drawPose(img, vw, vh);
+    if (out.newPunches && out.newPunches.length) {
+      st.punches.push(...out.newPunches);
+      st.selected = out.newPunches[out.newPunches.length - 1].id;
+      flash(out.newPunches[out.newPunches.length - 1]);
+      renderAll();
+    } else if (out.updated && out.updated.length) {
+      renderAll();
+    }
+  } else {
+    st.trails = { L: [], R: [] };
+  }
+  if (isFile) nextFileFrame();
+  else video.requestVideoFrameCallback(onFrame);
+}
+
+function nextFileFrame() {
+  if (!st.running) return;
+  if (video.ended || video.currentTime >= video.duration - 1e-3) { finishFile(); return; }
+  video.requestVideoFrameCallback(onFrame);
+  video.play().catch(() => {});
+}
+
+function finishFile() {
+  if (!st.running) return;
+  st.running = false; setGoEnabled();
+  $('progressBar').style.width = '100%';
+  $('calib').hidden = false;
+  $('calib').textContent = `Done. ${st.punches.length} punch${st.punches.length === 1 ? '' : 'es'} found in ${st.fileFrames} frames.`;
+}
+
+function drawPose(img, vw, vh) {
+  const s = Math.max(2, vw / 420);
+  octx.lineCap = 'round';
+  octx.strokeStyle = 'rgba(232,235,238,.75)'; octx.lineWidth = s;
+  octx.beginPath();
+  for (const [a, b] of BONES) {
+    if ((img[a].visibility ?? 1) < 0.4 || (img[b].visibility ?? 1) < 0.4) continue;
+    octx.moveTo(img[a].x, img[a].y); octx.lineTo(img[b].x, img[b].y);
+  }
+  octx.stroke();
+  const colors = { L: css('--blue'), R: css('--red') };
+  for (const [h, i] of [['L', 15], ['R', 16]]) {
+    const tr = st.trails[h];
+    if ((img[i].visibility ?? 1) > 0.4) tr.push({ x: img[i].x, y: img[i].y }); else tr.length = 0;
+    while (tr.length > 14) tr.shift();
+    for (let k = 1; k < tr.length; k++) {
+      octx.globalAlpha = k / tr.length;
+      octx.strokeStyle = colors[h]; octx.lineWidth = s * 2.2 * (k / tr.length) + 1;
+      octx.beginPath(); octx.moveTo(tr[k - 1].x, tr[k - 1].y); octx.lineTo(tr[k].x, tr[k].y); octx.stroke();
+    }
+    octx.globalAlpha = 1;
+    if (tr.length) { octx.fillStyle = colors[h]; octx.beginPath(); octx.arc(tr[tr.length - 1].x, tr[tr.length - 1].y, s * 3, 0, Math.PI * 2); octx.fill(); }
+  }
+}
+
+function flash(p) {
+  const el = $('flash');
+  el.textContent = `${p.type} · ${fmtSpeed(p.speed)} ${unitLabel()}`;
+  el.style.background = p.hand === 'L' ? css('--blue') : css('--red');
+  el.classList.add('show');
+  clearTimeout(st.flashTimer);
+  st.flashTimer = setTimeout(() => el.classList.remove('show'), 700);
+}
+
+/* ---------- rendering ---------- */
+function renderAll() { renderHud(); renderStats(); renderLog(); drawStrip(); }
+
+function selectedPunch() { return st.punches.find((p) => p.id === st.selected) || st.punches[st.punches.length - 1] || null; }
+
+function renderHud() {
+  const p = selectedPunch();
+  $('hudUnit').textContent = unitLabel();
+  const meter = $('meter');
+  if (!meter.children.length) for (let i = 0; i < 10; i++) meter.appendChild(document.createElement('i'));
+  if (!p) {
+    $('hudTitle').textContent = 'Last punch'; $('hudHand').hidden = true;
+    $('hudSpeed').textContent = '–'; $('hudType').textContent = 'No punches yet';
+    for (const id of ['hudOut','hudBack','hudReach','hudHip','hudSh','hudGuard','hudPI']) $(id).textContent = '–';
+    [...meter.children].forEach((c) => c.classList.remove('on'));
+    $('seqLine').textContent = 'Hips should peak first, then shoulders, then the hand.';
+    drawChain(null); return;
+  }
+  const latest = st.punches[st.punches.length - 1];
+  $('hudTitle').textContent = p === latest ? 'Last punch' : `Punch #${p.id}`;
+  const tag = $('hudHand'); tag.hidden = false; tag.className = 'tag ' + p.hand;
+  tag.textContent = `${p.hand === 'L' ? 'Left' : 'Right'} · ${p.role}`;
+  $('hudSpeed').textContent = fmtSpeed(p.speed);
+  $('hudSpeed').style.color = p.hand === 'L' ? 'var(--blue)' : 'var(--red)';
+  $('hudType').textContent = p.type;
+  $('hudOut').textContent = p.outMs + ' ms';
+  $('hudBack').textContent = p.retractMs == null ? '–' : p.retractMs + ' ms';
+  $('hudReach').textContent = Math.round(p.reach * 100) + '%';
+  $('hudHip').textContent = p.hipPeak + '°/s';
+  $('hudSh').textContent = p.shPeak + '°/s';
+  const g = $('hudGuard');
+  g.textContent = p.guardUp == null ? 'Not visible' : (p.guardUp ? 'Guard up' : 'Dropped');
+  g.className = p.guardUp == null ? '' : (p.guardUp ? 'g-ok' : 'g-bad');
+  $('hudPI').textContent = p.power;
+  [...meter.children].forEach((c, i) => c.classList.toggle('on', i < Math.round(p.power / 10)));
+  $('legHand').style.background = p.hand === 'L' ? 'var(--blue)' : 'var(--red)';
+  const line = $('seqLine');
+  if (p.tHip == null) line.textContent = 'Not enough rotation data for this punch.';
+  else {
+    const f = (x) => (x > 0 ? '+' : '') + Math.round(x) + ' ms';
+    line.innerHTML = `Hips ${f(p.tHip)} · Shoulders ${f(p.tSh)} · Hand 0 ms &nbsp; <span class="${p.inOrder ? 'ok' : 'off'}">${p.inOrder ? 'In order' : 'Out of order'}</span>`;
+  }
+  drawChain(p);
+}
+
+function renderStats() {
+  const P = st.punches;
+  $('sCount').textContent = P.length;
+  const span = st.session && st.session.lastT != null && st.session.startT != null ? st.session.lastT - st.session.startT : 0;
+  $('sRate').textContent = P.length && span > 10 ? Math.round(P.length / (span / 60)) : '–';
+  for (const [h, id] of [['L', 'sLeft'], ['R', 'sRight']]) {
+    const s = P.filter((p) => p.hand === h).map((p) => p.speed);
+    $(id).textContent = s.length ? `${fmtSpeed(s.reduce((a, b) => a + b, 0) / s.length)} / ${fmtSpeed(Math.max(...s))}` : '–';
+  }
+  $('sPI').textContent = P.length ? Math.round(P.reduce((a, p) => a + p.power, 0) / P.length) : '–';
+  const g = P.filter((p) => p.guardUp != null);
+  $('sGuard').textContent = g.length ? Math.round(100 * g.filter((p) => p.guardUp).length / g.length) + '%' : '–';
+  if (P.length >= 8) {
+    const q = Math.max(2, Math.floor(P.length / 4));
+    const avg = (a) => a.reduce((x, p) => x + p.speed, 0) / a.length;
+    $('sHold').textContent = Math.round(100 * avg(P.slice(-q)) / avg(P.slice(0, q))) + '%';
+  } else $('sHold').textContent = P.length ? 'Needs 8+' : '–';
+  const sq = P.filter((p) => p.inOrder != null);
+  $('sSeq').textContent = sq.length ? Math.round(100 * sq.filter((p) => p.inOrder).length / sq.length) + '%' : '–';
+  $('btnCsv').disabled = !P.length;
+}
+
+function renderLog() {
+  const body = $('logBody');
+  $('logEmpty').hidden = st.punches.length > 0;
+  const sel = selectedPunch();
+  const rows = st.punches.slice(-200).reverse().map((p) => {
+    const seq = p.tHip == null ? '–' : `${p.inOrder ? 'in order' : 'out of order'} (${Math.round(p.tHip)}/${Math.round(p.tSh)})`;
+    const guard = p.guardUp == null ? '–' : (p.guardUp ? '<span class="g-ok">up</span>' : '<span class="g-bad">dropped</span>');
+    return `<tr data-id="${p.id}" class="${sel && sel.id === p.id ? 'sel' : ''}"><td>${p.id}</td><td class="num">${p.t.toFixed(1)}s</td>` +
+      `<td><span class="hand ${p.hand}">${p.hand}</span></td><td>${p.type}</td><td class="num">${fmtSpeed(p.speed)}</td>` +
+      `<td class="num">${p.power}</td><td class="num">${p.outMs}</td><td class="num">${p.retractMs ?? '–'}</td><td>${seq}</td><td>${guard}</td></tr>`;
+  });
+  body.innerHTML = rows.join('');
+}
+$('logBody').addEventListener('click', (e) => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  st.selected = +tr.dataset.id; renderHud(); renderLog();
+});
+
+function fitCanvas(c) {
+  const dpr = window.devicePixelRatio || 1, r = c.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: r.width, h: r.height };
+}
+
+function drawChain(p) {
+  const { ctx, w, h } = fitCanvas($('chain'));
+  ctx.clearRect(0, 0, w, h);
+  const pad = { l: 8, r: 8, t: 10, b: 22 };
+  const X = (ms) => pad.l + (ms + 350) / 650 * (w - pad.l - pad.r);
+  const Y = (v) => pad.t + (1 - v) * (h - pad.t - pad.b);
+  ctx.strokeStyle = css('--line'); ctx.lineWidth = 1;
+  ctx.font = '500 10px ' + css('--f-mono'); ctx.fillStyle = css('--muted'); ctx.textAlign = 'center';
+  for (const ms of [-300, -200, -100, 0, 100, 200, 300]) {
+    ctx.beginPath(); ctx.moveTo(X(ms), pad.t); ctx.lineTo(X(ms), h - pad.b); ctx.stroke();
+    ctx.fillText(ms === 0 ? '0 ms' : (ms > 0 ? '+' : '') + ms, X(ms), h - 7);
+  }
+  if (!p || !p.trace.t.length) {
+    ctx.textAlign = 'center'; ctx.font = '500 12px ' + css('--f-body');
+    ctx.fillText('Throw a punch to see the chain', w / 2, h / 2 - 4); return;
+  }
+  const series = [
+    { key: 'hip', color: css('--gold'), width: 2 },
+    { key: 'sh', color: css('--muted'), width: 2 },
+    { key: 'hand', color: p.hand === 'L' ? css('--blue') : css('--red'), width: 2.5 },
+  ];
+  for (const s of series) {
+    const vals = p.trace[s.key], mx = Math.max(...vals, 1e-6);
+    ctx.strokeStyle = s.color; ctx.lineWidth = s.width; ctx.beginPath();
+    vals.forEach((v, i) => { const x = X(p.trace.t[i]), y = Y(v / mx); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+    const k = vals.indexOf(mx);
+    ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(X(p.trace.t[k]), Y(1), 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawStrip() {
+  const { ctx, w, h } = fitCanvas($('strip'));
+  ctx.clearRect(0, 0, w, h);
+  const P = st.punches.slice(-80);
+  const pad = { l: 40, r: 6, t: 8, b: 18 };
+  const conv = (ms) => units() === 'mph' ? ms * MPH : ms;
+  const top = Math.max(conv(6), ...P.map((p) => conv(p.speed))) * 1.1;
+  const step = units() === 'mph' ? 5 : 2;
+  const Y = (v) => pad.t + (1 - v / top) * (h - pad.t - pad.b);
+  ctx.font = '500 10px ' + css('--f-mono'); ctx.textAlign = 'right'; ctx.fillStyle = css('--muted');
+  ctx.strokeStyle = css('--line'); ctx.lineWidth = 1;
+  for (let v = 0; v <= top; v += step) {
+    ctx.beginPath(); ctx.moveTo(pad.l, Y(v)); ctx.lineTo(w - pad.r, Y(v)); ctx.stroke();
+    ctx.fillText(String(v), pad.l - 6, Y(v) + 3);
+  }
+  ctx.textAlign = 'left'; ctx.fillText(unitLabel(), 0, h - 4);
+  if (!P.length) return;
+  const slot = (w - pad.l - pad.r) / Math.max(P.length, 20);
+  const bw = Math.max(2, slot * 0.7);
+  const sel = selectedPunch();
+  P.forEach((p, i) => {
+    const x = pad.l + i * slot + (slot - bw) / 2, y = Y(conv(p.speed));
+    ctx.fillStyle = p.hand === 'L' ? css('--blue') : css('--red');
+    ctx.globalAlpha = sel && sel.id === p.id ? 1 : 0.8;
+    ctx.fillRect(x, y, bw, Y(0) - y);
+  });
+  ctx.globalAlpha = 1;
+}
+
+/* ---------- CSV ---------- */
+function exportCsv() {
+  const head = ['punch','time_s','hand','role','type','speed_ms','speed_mph','power_index','out_ms','back_to_guard_ms','reach_pct','hip_turn_dps','shoulder_turn_dps','hip_peak_ms','shoulder_peak_ms','sequence_in_order','hip_drive','guard_up'];
+  const rows = st.punches.map((p) => [p.id, p.t.toFixed(2), p.hand, p.role, p.type, p.speed.toFixed(2), (p.speed * MPH).toFixed(1), p.power, p.outMs, p.retractMs ?? '',
+    Math.round(p.reach * 100), p.hipPeak, p.shPeak, p.tHip == null ? '' : Math.round(p.tHip), p.tSh == null ? '' : Math.round(p.tSh), p.inOrder ?? '', p.drive.toFixed(3), p.guardUp ?? '']);
+  const csv = [head, ...rows].map((r) => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `punch-lab-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ---------- wiring ---------- */
+$('srcCam').addEventListener('click', () => setSource('camera'));
+$('srcFile').addEventListener('click', () => setSource('file'));
+$('btnGo').addEventListener('click', () => {
+  if (st.running) { stopAll(); return; }
+  st.source === 'camera' ? startCamera() : analyzeFile();
+});
+$('fileInput').addEventListener('change', (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  stopAll();
+  if (st.fileURL) URL.revokeObjectURL(st.fileURL);
+  st.fileURL = URL.createObjectURL(f);
+  video.srcObject = null; video.src = st.fileURL; video.load();
+  $('idle').hidden = true; $('progress').hidden = false; $('progressBar').style.width = '0';
+  $('calib').hidden = true;
+  setGoEnabled();
+});
+$('btnReset').addEventListener('click', () => newSession());
+$('btnCsv').addEventListener('click', exportCsv);
+for (const id of ['height', 'stance']) $(id).addEventListener('change', () => { saveSettings(); newSession(); });
+$('units').addEventListener('change', () => { saveSettings(); renderAll(); });
+$('slowmo').addEventListener('change', saveSettings);
+$('model').addEventListener('change', () => { saveSettings(); stopAll(); loadModel($('model').value); });
+$('heightUnit').addEventListener('change', () => {
+  const v = parseFloat($('height').value);
+  if (isFinite(v)) $('height').value = $('heightUnit').value === 'cm' ? Math.round(v * 2.54) : Math.round(v / 2.54);
+  saveSettings(); newSession();
+});
+window.addEventListener('resize', () => { drawChain(selectedPunch()); drawStrip(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => renderAll());
+
+/* ---------- install as an app ---------- */
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; $('btnInstall').hidden = false; });
+$('btnInstall').addEventListener('click', async () => {
+  if (!installEvt) return;
+  installEvt.prompt();
+  try { await installEvt.userChoice; } catch (e) {}
+  installEvt = null; $('btnInstall').hidden = true;
+});
+window.addEventListener('appinstalled', () => { $('btnInstall').hidden = true; });
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+if (!standalone && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('iosHint').hidden = false;
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Offline support unavailable', e));
+
+loadSettings();
+setSource('camera');
+newSession();
+loadModel($('model').value);
+</script>
+</body>
+</html>
