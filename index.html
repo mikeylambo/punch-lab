@@ -174,6 +174,8 @@ tbody tr.sel td { background: color-mix(in srgb, var(--gold) 14%, transparent); 
 .g-ok { color: var(--good); } .g-bad { color: var(--bad); }
 .empty { padding: 22px 4px; color: var(--muted); font-size: 14px; }
 footer.note { font-size: 12.5px; color: var(--muted); max-width: 90ch; }
+.diag { margin: 0; font: 400 12.5px/1.5 var(--f-mono); color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; overflow-wrap: anywhere; }
+.diag b { color: var(--fg); font-weight: 500; }
 @media (prefers-reduced-motion: reduce) { .flash { transition: none; } }
 </style>
 </head>
@@ -240,6 +242,7 @@ footer.note { font-size: 12.5px; color: var(--muted); max-width: 90ch; }
             <select id="slowmo"><option value="1">Normal speed</option><option value="4">Slow-mo, 4× slower</option><option value="8">Slow-mo, 8× slower</option></select></div>
         </div>
         <div class="loaderr" id="loadErr" role="alert" hidden></div>
+        <p class="diag" id="diag" aria-live="off">Diagnostics: start the camera or a video.</p>
         <p class="hint" id="hint">Height sets the scale. The first second of tracking measures your arm length, so start with your full body visible.</p>
       </div>
     </section>
@@ -621,6 +624,7 @@ const st = {
   source: 'camera', stream: null, running: false, fileURL: null,
   session: null, punches: [], selected: null, trails: { L: [], R: [] },
   lastTs: 0, lastMedia: -1, fpsFrames: [], flashTimer: null,
+  diag: { frames: 0, posed: 0, peak: { L: 0, R: 0 }, peakT: 0, reject: null, lastDraw: 0 },
 };
 
 /* ---------- settings ---------- */
@@ -753,7 +757,10 @@ function setModelStatus(kind, text) { $('dotModel').className = 'dot ' + kind; $
 
 /* ---------- session ---------- */
 function newSession() {
-  st.session = PunchEngine.createSession({ heightM: heightM(), stance: $('stance').value });
+  st.session = PunchEngine.createSession({ heightM: heightM(), stance: $('stance').value, debug: (h, t, why, v) => {
+    st.diag.reject = `${h === 'L' ? 'left' : 'right'} ${fmtSpeed(v)} ${unitLabel()}: ${why}`;
+  } });
+  st.diag = { frames: 0, posed: 0, peak: { L: 0, R: 0 }, peakT: 0, reject: null, lastDraw: 0 };
   st.punches = []; st.selected = null; st.trails = { L: [], R: [] }; st.lastMedia = -1;
   $('stScale').textContent = 'Not calibrated';
   renderAll();
@@ -856,7 +863,7 @@ function onFrame(now, meta) {
     st.fileFrames++;
   }
   st.lastMedia = media;
-  const t = isFile ? media / parseFloat($('slowmo').value) : media;
+  const t = isFile ? media / parseFloat($('slowmo').value) : ((meta && meta.captureTime) || now) / 1000;
 
   let ts = Math.round(isFile ? media * 1000 : now);
   if (ts <= st.lastTs) ts = st.lastTs + 1;
@@ -876,6 +883,8 @@ function onFrame(now, meta) {
     const norm = res.landmarks[0], world = res.worldLandmarks[0];
     const img = norm.map((p) => ({ x: p.x * vw, y: p.y * vh, visibility: p.visibility }));
     const out = st.session.push(t, world, img);
+    st.diag.posed++;
+    if (out.sample) for (const h of ['L', 'R']) st.diag.peak[h] = Math.max(st.diag.peak[h], out.sample.sp[h]);
     if (out.calibrating) {
       $('calib').hidden = false;
       $('calib').textContent = `Measuring your arms… ${Math.round(100 * (out.progress || 0))}%`;
@@ -895,8 +904,29 @@ function onFrame(now, meta) {
   } else {
     st.trails = { L: [], R: [] };
   }
+  st.diag.frames++;
+  drawDiag(now, !!(res && res.landmarks && res.landmarks.length));
   if (isFile) nextFileFrame();
   else video.requestVideoFrameCallback(onFrame);
+}
+
+// Live readout of what the tracker sees, so a session with no punches shows where it stops
+function drawDiag(now, posed) {
+  const d = st.diag;
+  if (now - d.lastDraw < 250) return;
+  d.lastDraw = now;
+  const s = st.session;
+  const body = posed ? '<b>found</b>' : '<b>not found</b> (step back so head to feet is in frame)';
+  const cal = !s || !s.scale ? 'measuring arms' : 'done';
+  const pk = `${fmtSpeed(d.peak.L)} / ${fmtSpeed(d.peak.R)} ${unitLabel()}`;
+  const need = `${fmtSpeed(2.5)} ${unitLabel()}`;
+  const el = $('diag');
+  el.innerHTML = '';
+  el.append('Body ');
+  el.insertAdjacentHTML('beforeend', body);
+  el.append(` · Calibration ${cal} · Fastest hand speed L/R ${pk} (a punch needs ${need}+) · Frames ${d.frames}, with a body ${d.posed}`);
+  if (d.reject) el.append(` · Last move skipped: ${d.reject}`);
+  if (now - d.peakT > 3000) { d.peak = { L: 0, R: 0 }; d.peakT = now; }
 }
 
 function nextFileFrame() {

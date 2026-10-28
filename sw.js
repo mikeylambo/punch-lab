@@ -1,6 +1,6 @@
 // Punch Lab service worker: keeps the app, the pose engine and the model on the device
 // so the app opens and tracks with no connection after the first run.
-const VERSION = 'punchlab-v2';
+const VERSION = 'punchlab-v3';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png',
